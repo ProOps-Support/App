@@ -3,16 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operations Support System</title>
+    <title>Operations Support System + QR Tool</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Library QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- Library jsPDF untuk generate PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         
@@ -24,10 +35,19 @@
         .animate-fade-in {
             animation: fadeIn 0.3s ease-out;
         }
+        
+        .animate-slide-down {
+            animation: slideDown 0.3s ease-out forwards;
+        }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.95); }
+            from { opacity: 0; transform: scale(0.98); }
             to { opacity: 1; transform: scale(1); }
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* Custom Scrollbar */
@@ -50,8 +70,9 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
+        // --- ICON COMPONENT ---
         const Icon = ({ name, size = 18, className = "", strokeWidth = 2 }) => {
             useEffect(() => {
                 if (window.lucide) {
@@ -65,12 +86,371 @@
                       strokeWidth={strokeWidth}></i>;
         };
 
+        // --- QR GENERATOR COMPONENT (New) ---
+        const QrGeneratorComponent = () => {
+            const [text, setText] = useState("");
+            const [label, setLabel] = useState("");
+            const [colorDark, setColorDark] = useState("#000000");
+            const [colorLight, setColorLight] = useState("#ffffff");
+            const [isGenerated, setIsGenerated] = useState(false);
+            const [pdfSize, setPdfSize] = useState("a4");
+            
+            const qrCodeRef = useRef(null);
+
+            const handleGenerate = () => {
+                if (!text.trim()) {
+                    alert("Harap masukkan teks atau URL terlebih dahulu!");
+                    return;
+                }
+
+                // PERBAIKAN: Cek apakah ref sudah ada sebelum mengakses property-nya
+                // Saat pertama kali generate, qrCodeRef.current masih null karena div belum di-render
+                if (qrCodeRef.current) {
+                    qrCodeRef.current.innerHTML = "";
+                }
+                
+                setIsGenerated(true);
+
+                // Gunakan setTimeout agar DOM siap setelah state update (re-render)
+                setTimeout(() => {
+                    if (qrCodeRef.current) {
+                        // Bersihkan lagi untuk memastikan tidak double render
+                        qrCodeRef.current.innerHTML = "";
+
+                        new QRCode(qrCodeRef.current, {
+                            text: text,
+                            width: 256,
+                            height: 256,
+                            colorDark : colorDark,
+                            colorLight : colorLight,
+                            correctLevel : QRCode.CorrectLevel.H
+                        });
+                        // Hapus title attribute bawaan library
+                        qrCodeRef.current.removeAttribute('title');
+                    }
+                }, 50);
+            };
+
+            const getQRDataURL = () => {
+                if (!qrCodeRef.current) return null;
+                
+                const img = qrCodeRef.current.querySelector("img");
+                if (img && img.src) return img.src;
+                
+                const canvas = qrCodeRef.current.querySelector("canvas");
+                if (canvas) return canvas.toDataURL("image/png");
+                
+                return null;
+            };
+
+            const handleDownloadPNG = () => {
+                const dataUrl = getQRDataURL();
+                if (dataUrl) {
+                    const link = document.createElement("a");
+                    link.href = dataUrl;
+                    link.download = `qr-code-${Date.now()}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
+            const handleDownloadPDF = () => {
+                const dataUrl = getQRDataURL();
+                if (!dataUrl) return;
+
+                const { jsPDF } = window.jspdf;
+                
+                // Konfigurasi ukuran
+                let format = 'a4', orientation = 'portrait', pageWidth = 210, pageHeight = 297, qrSize = 100, fontSize = 12;
+
+                if (pdfSize === 'a4') {
+                    qrSize = 120; fontSize = 14;
+                } else if (pdfSize === 'a5') {
+                    format = 'a5'; pageWidth = 148; pageHeight = 210; qrSize = 80; fontSize = 12;
+                } else if (pdfSize === 'letter') {
+                    format = 'letter'; pageWidth = 216; pageHeight = 279; qrSize = 120; fontSize = 14;
+                } else if (pdfSize === 'card') {
+                    format = [90, 55]; orientation = 'landscape'; pageWidth = 90; pageHeight = 55; qrSize = 35; fontSize = 8;
+                }
+
+                const doc = new jsPDF({ orientation, unit: 'mm', format });
+
+                let yOffset = label ? -5 : 0;
+                const x = (pageWidth - qrSize) / 2;
+                const y = ((pageHeight - qrSize) / 2) + yOffset;
+
+                doc.addImage(dataUrl, 'PNG', x, y, qrSize, qrSize);
+                
+                if (label) {
+                    doc.setFontSize(fontSize);
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont("helvetica", "bold");
+                    const textWidth = doc.getTextWidth(label);
+                    const textX = (pageWidth - textWidth) / 2;
+                    const textY = y + qrSize + (pdfSize === 'card' ? 4 : 8);
+                    
+                    if (textY < pageHeight) {
+                        doc.text(label, textX, textY);
+                    }
+                }
+
+                doc.save(`qr-code-${pdfSize}-${Date.now()}.pdf`);
+            };
+
+            const handleReset = () => {
+                setText("");
+                setLabel("");
+                setIsGenerated(false);
+                // Cek ref sebelum akses
+                if(qrCodeRef.current) qrCodeRef.current.innerHTML = "";
+            };
+
+            return (
+                <div className="w-full max-w-4xl mx-auto animate-fade-in">
+                    <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-200 flex flex-col md:flex-row">
+                        
+                        {/* Kolom Kiri: Input */}
+                        <div className="p-8 md:w-1/2 space-y-6 border-b md:border-b-0 md:border-r border-slate-100">
+                             <div>
+                                <h2 className="text-2xl font-bold text-slate-800 mb-1">Buat QR Code</h2>
+                                <p className="text-slate-400 text-sm">Generate QR untuk Aset, Lokasi, atau URL.</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Konten (URL / Teks)</label>
+                                    <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+                                        placeholder="https://..." 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Label (Opsional)</label>
+                                    <input type="text" value={label} onChange={(e) => setLabel(e.target.value)}
+                                        placeholder="Nama Aset / Ruangan" 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-orange-100 focus:border-orange-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Warna QR</label>
+                                        <div className="flex items-center space-x-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                                            <input type="color" value={colorDark} onChange={(e) => setColorDark(e.target.value)} className="h-8 w-8 rounded cursor-pointer border-none bg-transparent" />
+                                            <span className="text-xs text-slate-500 font-mono">{colorDark}</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 mb-1">Background</label>
+                                        <div className="flex items-center space-x-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                                            <input type="color" value={colorLight} onChange={(e) => setColorLight(e.target.value)} className="h-8 w-8 rounded cursor-pointer border-none bg-transparent" />
+                                            <span className="text-xs text-slate-500 font-mono">{colorLight}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button onClick={handleReset} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Reset</button>
+                                <button onClick={handleGenerate} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-orange-200 transition-all flex justify-center items-center gap-2">
+                                    <Icon name="QrCode" size={18} /> Buat QR
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Kolom Kanan: Preview */}
+                        <div className="p-8 md:w-1/2 bg-slate-50 flex flex-col justify-center items-center">
+                            {!isGenerated ? (
+                                <div className="text-center text-slate-400 space-y-3">
+                                    <div className="w-24 h-24 bg-slate-200 rounded-2xl mx-auto flex items-center justify-center">
+                                        <Icon name="QrCode" size={40} className="opacity-20" />
+                                    </div>
+                                    <p className="text-sm font-medium">Preview akan muncul di sini</p>
+                                </div>
+                            ) : (
+                                <div className="w-full flex flex-col items-center animate-fade-in space-y-6">
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                                        <div ref={qrCodeRef}></div>
+                                    </div>
+                                    {label && <p className="font-bold text-slate-700 text-lg font-mono">{label}</p>}
+
+                                    <div className="w-full space-y-3 max-w-xs">
+                                        <button onClick={handleDownloadPNG} className="w-full bg-white border border-slate-200 hover:border-orange-300 text-slate-700 font-bold py-2.5 px-4 rounded-xl transition flex justify-center items-center gap-2 text-sm shadow-sm">
+                                            <Icon name="Download" size={16} /> Unduh PNG
+                                        </button>
+                                        
+                                        <div className="flex gap-2">
+                                            <select value={pdfSize} onChange={(e) => setPdfSize(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl focus:ring-orange-500 block p-2.5 outline-none">
+                                                <option value="a4">A4</option>
+                                                <option value="a5">A5</option>
+                                                <option value="letter">Letter</option>
+                                                <option value="card">Kartu</option>
+                                            </select>
+                                            <button onClick={handleDownloadPDF} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl transition flex justify-center items-center gap-2 text-sm shadow-red-100">
+                                                <Icon name="FileText" size={16} /> PDF
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DASHBOARD COMPONENT ---
+        const DashboardComponent = ({ tickets, stats, categories, handleOpenModal }) => {
+            return (
+                <div className="space-y-8 animate-fade-in">
+                    {/* Banner Utama */}
+                    <div className="relative h-[280px] rounded-[2rem] overflow-hidden shadow-xl shadow-orange-500/10">
+                        <img 
+                            src="https://lh3.googleusercontent.com/gps-cs-s/AHVAweoCSUlbIC9yX_PYOsRqsX0pv_b_4OeP3AahR-3Nm3xyVZ7ZViTPoG1Xk4jEbn4ACbga-DHeYUlHYTxr4XCnMiMeZXVT0dfj9NY_6yfUV0S_e69oX7tKR7gjewPvGCJNndCsD5tT=s1200" 
+                            className="absolute inset-0 w-full h-full object-cover object-top"
+                            alt="Fasilitas Pabrik"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent"></div>
+                        <div className="relative z-10 p-10 h-full flex flex-col justify-center max-w-2xl">
+                            <div className="inline-flex items-center space-x-2 py-1 px-3 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-black tracking-widest uppercase mb-4 border border-orange-500/30 backdrop-blur-sm">
+                                <Icon name="Activity" size={12} />
+                                <span>System Operational</span>
+                            </div>
+                            <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg text-balance">Operations Support Center</h2>
+                            <p className="text-slate-200 font-medium text-lg opacity-95 drop-shadow-sm text-balance">Pantau pemeliharaan, keamanan, dan fasilitas penunjang pabrik dalam satu dasbor terintegrasi.</p>
+                        </div>
+                    </div>
+
+                    {/* Grid Layanan */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                        {categories.map((cat) => (
+                            <button 
+                                key={cat.id}
+                                className="bg-white rounded-[1.2rem] p-5 shadow-sm border border-slate-100 flex flex-col text-left hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group outline-none focus:ring-2 focus:ring-orange-500/20"
+                                onClick={() => handleOpenModal(cat)}
+                            >
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cat.color} text-white mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+                                    <Icon name={cat.icon} size={20} />
+                                </div>
+                                <h3 className="text-sm font-bold text-slate-800 mb-1 leading-tight">{cat.title}</h3>
+                                <p className="text-slate-400 text-[11px] mb-4 flex-grow leading-relaxed line-clamp-2">{cat.desc}</p>
+                                <div className="flex items-center text-orange-600 font-bold text-[10px] uppercase tracking-wider group-hover:translate-x-1 transition-transform mt-auto">
+                                    Buat Laporan <Icon name="ChevronRight" size={14} className="ml-1" />
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Status Overview & Recent Tickets */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* TABEL TIKET TERKINI */}
+                        <div className="lg:col-span-2 bg-white rounded-[1.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                    <div className="p-1.5 bg-orange-50 rounded-lg">
+                                        <Icon name="ClipboardList" className="text-orange-600" size={18} />
+                                    </div>
+                                    <h3 className="font-bold text-slate-800">Tiket Dukungan Terkini</h3>
+                                </div>
+                                <button className="text-orange-600 text-xs font-bold hover:bg-orange-50 px-3 py-1.5 rounded-lg transition-colors">Lihat Semua</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        <tr>
+                                            <th className="px-6 py-4">ID & Pelapor</th>
+                                            <th className="px-6 py-4">Subjek & Kategori</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4">Tanggal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {tickets.map(t => (
+                                            <tr key={t.id} className="text-xs hover:bg-slate-50/80 transition-all animate-fade-in">
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-orange-600 mb-0.5">#{t.id}</div>
+                                                    <div className="text-[10px] font-semibold text-slate-500 flex items-center">
+                                                        <Icon name="User" size={10} className="mr-1" /> {t.reporter}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-semibold text-slate-800 mb-0.5">{t.subject}</div>
+                                                    <div className="text-[10px] text-slate-400 font-medium bg-slate-100 inline-block px-1.5 py-0.5 rounded-md">
+                                                        {t.category} • {t.dept}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${t.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
+                                                        {t.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-400 font-medium">{t.date}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* RINGKASAN STATUS */}
+                        <div className="bg-white rounded-[1.5rem] p-6 shadow-sm border border-slate-100 space-y-6">
+                            <h3 className="font-bold text-slate-800 flex items-center">
+                                <Icon name="PieChart" className="mr-2 text-orange-600" size={20} />
+                                Ringkasan Status
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between p-4 bg-orange-50/50 rounded-2xl border border-orange-100 hover:bg-orange-50 transition-colors">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-200">
+                                            <Icon name="Clock" size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-orange-800 uppercase tracking-widest">Dalam Antrian</p>
+                                            <p className="text-xl font-black text-orange-950 leading-none">{stats.inQueue}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between p-4 bg-blue-50/50 rounded-2xl border border-blue-100 hover:bg-blue-50 transition-colors">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                                            <Icon name="Activity" size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Sedang Dikerjakan</p>
+                                            <p className="text-xl font-black text-blue-950 leading-none">{stats.processing}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 hover:bg-emerald-50 transition-colors">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                                            <Icon name="CheckCircle2" size={20} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Selesai (Bulan ini)</p>
+                                            <p className="text-xl font-black text-emerald-950 leading-none">{stats.completed}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="pt-4 border-t border-slate-50">
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Data terupdate real-time</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        // --- MAIN APP COMPONENT ---
         const App = () => {
+            const [activeTab, setActiveTab] = useState("Dashboard");
             const [showModal, setShowModal] = useState(false);
             const [selectedCategory, setSelectedCategory] = useState(null);
-            const [formStatus, setFormStatus] = useState('idle'); // idle, submitting, success
+            const [formStatus, setFormStatus] = useState('idle');
             const [selectedDept, setSelectedDept] = useState('');
             const [isManualDept, setIsManualDept] = useState(false);
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
             
             // State Tiket Utama
             const [tickets, setTickets] = useState([
@@ -79,25 +459,26 @@
                 { id: 'TKT-001', reporter: 'Andi Wijaya', dept: 'Engineering', category: 'Pemeliharaan Pabrik', subject: 'AC Ruang Server Panas', status: 'In Progress', date: '2023-10-24' },
             ]);
 
-            // Menghitung Ringkasan Status secara otomatis (Computed State)
             const stats = useMemo(() => {
                 return {
-                    inQueue: tickets.filter(t => t.status === 'In Progress').length + 9, // Simulasi tambahan antrian lama
+                    inQueue: tickets.filter(t => t.status === 'In Progress').length + 9,
                     processing: tickets.filter(t => t.status === 'In Progress').length,
-                    completed: tickets.filter(t => t.status === 'Completed').length + 45 // Simulasi riwayat lama
+                    completed: tickets.filter(t => t.status === 'Completed').length + 45
                 };
             }, [tickets]);
 
             const navigationMenus = [
-                { id: 1, label: "Dashboard", icon: "LayoutDashboard", active: true },
-                { id: 2, label: "Ticketing", icon: "Ticket", active: false },
-                { id: 3, label: "Asset Management", icon: "HardHat", active: false, hasDropdown: true },
-                { id: 4, label: "Maintenance", icon: "Wrench", active: false },
-                { id: 5, label: "Facility", icon: "Building2", active: false },
-                { id: 6, label: "Safety/HSE", icon: "ShieldAlert", active: false },
-                { id: 7, label: "Reports", icon: "FileBarChart", active: false },
-                { id: 8, label: "Utility", icon: "Zap", active: false, hasDropdown: true },
-                { id: 9, label: "Settings", icon: "Settings", active: false },
+                { id: 1, label: "Dashboard", icon: "LayoutDashboard" },
+                { id: 2, label: "Ticketing", icon: "Ticket" },
+                { id: 10, label: "QR Generator", icon: "QrCode" }, 
+                { id: 11, label: "Jadwal", icon: "Calendar" }, // MENU BARU
+                { id: 3, label: "Asset Management", icon: "HardHat", hasDropdown: true },
+                // Menu Maintenance dihapus sesuai permintaan
+                { id: 5, label: "Facility", icon: "Building2" },
+                // Menu Safety/HSE dihapus sesuai permintaan
+                { id: 7, label: "Reports", icon: "FileBarChart" },
+                { id: 8, label: "Utility", icon: "Zap", hasDropdown: true },
+                { id: 9, label: "Settings", icon: "Settings" },
             ];
 
             const categories = [
@@ -126,13 +507,11 @@
             const handleSubmit = (e) => {
                 e.preventDefault();
                 setFormStatus('submitting');
-
                 const formData = new FormData(e.target);
                 const reporterName = formData.get('reporter_name');
                 const deptName = isManualDept ? formData.get('dept_manual') : formData.get('dept_select');
                 const subject = formData.get('subject');
                 
-                // Simulasi pengiriman data
                 setTimeout(() => {
                     const nextId = tickets.length + 1;
                     const newTicket = {
@@ -144,10 +523,7 @@
                         status: 'In Progress',
                         date: new Date().toISOString().split('T')[0]
                     };
-                    
-                    // Update state Tiket (Laporan Baru muncul paling atas)
                     setTickets(prev => [newTicket, ...prev]);
-                    
                     setFormStatus('success');
                     setTimeout(() => {
                         setShowModal(false);
@@ -159,25 +535,35 @@
                 <div className="min-h-screen flex flex-col relative">
                     {/* Header */}
                     <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 h-16 border-b border-slate-200 px-6 flex items-center justify-between">
-                        <div className="flex items-center space-x-8">
-                            <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 xl:space-x-8">
+                            {/* Mobile Hamburger Button */}
+                            <button 
+                                className="xl:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                            >
+                                <Icon name={isMobileMenuOpen ? "X" : "Menu"} size={24} />
+                            </button>
+
+                            <div className="flex items-center space-x-2 cursor-pointer" onClick={()=>setActiveTab('Dashboard')}>
                                 <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200">
                                     <Icon name="Wrench" size={24} />
                                 </div>
-                                <h1 className="text-xl font-bold text-slate-800 tracking-tight">Ops<span className="text-orange-600 font-extrabold">Support</span> Center</h1>
+                                <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden md:block">Ops<span className="text-orange-600 font-extrabold">Support</span> Center</h1>
                             </div>
                             
+                            {/* Desktop Navigation */}
                             <nav className="hidden xl:flex items-center bg-slate-100/50 rounded-xl p-1 space-x-1">
                                 {navigationMenus.map(menu => (
                                     <button 
                                         key={menu.id}
+                                        onClick={() => setActiveTab(menu.label)}
                                         className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                            menu.active 
+                                            activeTab === menu.label 
                                                 ? 'bg-white text-orange-600 shadow-sm border border-slate-100' 
                                                 : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
                                         }`}
                                     >
-                                        <Icon name={menu.icon} size={14} strokeWidth={menu.active ? 2.5 : 2} />
+                                        <Icon name={menu.icon} size={14} strokeWidth={activeTab === menu.label ? 2.5 : 2} />
                                         <span>{menu.label}</span>
                                         {menu.hasDropdown && <Icon name="ChevronDown" size={12} className="opacity-50" />}
                                     </button>
@@ -204,143 +590,56 @@
                             </div>
                         </div>
                     </header>
+                    
+                    {/* Mobile Navigation Dropdown */}
+                    {isMobileMenuOpen && (
+                        <div className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm xl:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+                            <div 
+                                className="absolute top-16 left-0 right-0 bg-white border-b border-slate-200 shadow-xl p-4 animate-slide-down max-h-[80vh] overflow-y-auto"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <div className="grid grid-cols-2 gap-2">
+                                    {navigationMenus.map(menu => (
+                                        <button 
+                                            key={menu.id}
+                                            onClick={() => {
+                                                setActiveTab(menu.label);
+                                                setIsMobileMenuOpen(false);
+                                            }}
+                                            className={`flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border ${
+                                                activeTab === menu.label 
+                                                    ? 'bg-orange-50 text-orange-600 border-orange-100' 
+                                                    : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <Icon name={menu.icon} size={24} className="mb-2" strokeWidth={activeTab === menu.label ? 2.5 : 2} />
+                                            <span>{menu.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                    <main className="flex-1 w-full max-w-7xl mx-auto p-6 space-y-8">
-                        {/* Banner Utama */}
-                        <div className="relative h-[280px] rounded-[2rem] overflow-hidden shadow-xl shadow-orange-500/10">
-                            <img 
-                                src="https://lh3.googleusercontent.com/gps-cs-s/AHVAweoCSUlbIC9yX_PYOsRqsX0pv_b_4OeP3AahR-3Nm3xyVZ7ZViTPoG1Xk4jEbn4ACbga-DHeYUlHYTxr4XCnMiMeZXVT0dfj9NY_6yfUV0S_e69oX7tKR7gjewPvGCJNndCsD5tT=s1200" 
-                                className="absolute inset-0 w-full h-full object-cover object-top"
-                                alt="Fasilitas Pabrik"
+                    <main className="flex-1 w-full max-w-7xl mx-auto p-6">
+                        {/* CONDITIONAL RENDERING UTAMA */}
+                        {activeTab === 'QR Generator' ? (
+                            <QrGeneratorComponent />
+                        ) : activeTab === 'Dashboard' ? (
+                            <DashboardComponent 
+                                tickets={tickets}
+                                stats={stats}
+                                categories={categories}
+                                handleOpenModal={handleOpenModal}
                             />
-                            <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent"></div>
-                            <div className="relative z-10 p-10 h-full flex flex-col justify-center max-w-2xl">
-                                <div className="inline-flex items-center space-x-2 py-1 px-3 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-black tracking-widest uppercase mb-4 border border-orange-500/30 backdrop-blur-sm">
-                                    <Icon name="Activity" size={12} />
-                                    <span>System Operational</span>
-                                </div>
-                                <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg text-balance">Operations Support Center</h2>
-                                <p className="text-slate-200 font-medium text-lg opacity-95 drop-shadow-sm text-balance">Pantau pemeliharaan, keamanan, dan fasilitas penunjang pabrik dalam satu dasbor terintegrasi.</p>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+                                <Icon name="Hammer" size={64} className="mb-4 text-slate-200" />
+                                <h3 className="text-xl font-bold">Halaman {activeTab}</h3>
+                                <p className="text-sm">Sedang dalam pengembangan.</p>
+                                <button onClick={() => setActiveTab('Dashboard')} className="mt-4 text-orange-600 font-bold text-sm hover:underline">Kembali ke Dashboard</button>
                             </div>
-                        </div>
-
-                        {/* Grid Layanan */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                            {categories.map((cat) => (
-                                <button 
-                                    key={cat.id}
-                                    className="bg-white rounded-[1.2rem] p-5 shadow-sm border border-slate-100 flex flex-col text-left hover:shadow-md hover:border-orange-200 transition-all cursor-pointer group outline-none focus:ring-2 focus:ring-orange-500/20"
-                                    onClick={() => handleOpenModal(cat)}
-                                >
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cat.color} text-white mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-                                        <Icon name={cat.icon} size={20} />
-                                    </div>
-                                    <h3 className="text-sm font-bold text-slate-800 mb-1 leading-tight">{cat.title}</h3>
-                                    <p className="text-slate-400 text-[11px] mb-4 flex-grow leading-relaxed line-clamp-2">{cat.desc}</p>
-                                    <div className="flex items-center text-orange-600 font-bold text-[10px] uppercase tracking-wider group-hover:translate-x-1 transition-transform mt-auto">
-                                        Buat Laporan <Icon name="ChevronRight" size={14} className="ml-1" />
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Status Overview & Recent Tickets */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {/* TABEL TIKET TERKINI */}
-                            <div className="lg:col-span-2 bg-white rounded-[1.5rem] shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="p-6 border-b border-slate-50 flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                        <div className="p-1.5 bg-orange-50 rounded-lg">
-                                            <Icon name="ClipboardList" className="text-orange-600" size={18} />
-                                        </div>
-                                        <h3 className="font-bold text-slate-800">Tiket Dukungan Terkini</h3>
-                                    </div>
-                                    <button className="text-orange-600 text-xs font-bold hover:bg-orange-50 px-3 py-1.5 rounded-lg transition-colors">Lihat Semua</button>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                            <tr>
-                                                <th className="px-6 py-4">ID & Pelapor</th>
-                                                <th className="px-6 py-4">Subjek & Kategori</th>
-                                                <th className="px-6 py-4">Status</th>
-                                                <th className="px-6 py-4">Tanggal</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {tickets.map(t => (
-                                                <tr key={t.id} className="text-xs hover:bg-slate-50/80 transition-all animate-fade-in">
-                                                    <td className="px-6 py-4">
-                                                        <div className="font-bold text-orange-600 mb-0.5">#{t.id}</div>
-                                                        <div className="text-[10px] font-semibold text-slate-500 flex items-center">
-                                                            <Icon name="User" size={10} className="mr-1" /> {t.reporter}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="font-semibold text-slate-800 mb-0.5">{t.subject}</div>
-                                                        <div className="text-[10px] text-slate-400 font-medium bg-slate-100 inline-block px-1.5 py-0.5 rounded-md">
-                                                            {t.category} • {t.dept}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${t.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
-                                                            {t.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-400 font-medium">{t.date}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-
-                            {/* RINGKASAN STATUS (TERUPDATE OTOMATIS) */}
-                            <div className="bg-white rounded-[1.5rem] p-6 shadow-sm border border-slate-100 space-y-6">
-                                <h3 className="font-bold text-slate-800 flex items-center">
-                                    <Icon name="PieChart" className="mr-2 text-orange-600" size={20} />
-                                    Ringkasan Status
-                                </h3>
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between p-4 bg-orange-50/50 rounded-2xl border border-orange-100 hover:bg-orange-50 transition-colors">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-lg shadow-orange-200">
-                                                <Icon name="Clock" size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-orange-800 uppercase tracking-widest">Dalam Antrian</p>
-                                                <p className="text-xl font-black text-orange-950 leading-none">{stats.inQueue}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between p-4 bg-blue-50/50 rounded-2xl border border-blue-100 hover:bg-blue-50 transition-colors">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
-                                                <Icon name="Activity" size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-blue-800 uppercase tracking-widest">Sedang Dikerjakan</p>
-                                                <p className="text-xl font-black text-blue-950 leading-none">{stats.processing}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 hover:bg-emerald-50 transition-colors">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
-                                                <Icon name="CheckCircle2" size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Selesai (Bulan ini)</p>
-                                                <p className="text-xl font-black text-emerald-950 leading-none">{stats.completed}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="pt-4 border-t border-slate-50">
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center">Data terupdate real-time</p>
-                                </div>
-                            </div>
-                        </div>
+                        )}
                     </main>
 
                     {/* MODAL FORM LAPORAN */}
