@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operations Support System + QR Tool</title>
+    <title>Operations Support System + Links</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -86,7 +86,7 @@
                       strokeWidth={strokeWidth}></i>;
         };
 
-        // --- QR GENERATOR COMPONENT (New) ---
+        // --- QR GENERATOR COMPONENT ---
         const QrGeneratorComponent = () => {
             const [text, setText] = useState("");
             const [label, setLabel] = useState("");
@@ -103,18 +103,14 @@
                     return;
                 }
 
-                // PERBAIKAN: Cek apakah ref sudah ada sebelum mengakses property-nya
-                // Saat pertama kali generate, qrCodeRef.current masih null karena div belum di-render
                 if (qrCodeRef.current) {
                     qrCodeRef.current.innerHTML = "";
                 }
                 
                 setIsGenerated(true);
 
-                // Gunakan setTimeout agar DOM siap setelah state update (re-render)
                 setTimeout(() => {
                     if (qrCodeRef.current) {
-                        // Bersihkan lagi untuk memastikan tidak double render
                         qrCodeRef.current.innerHTML = "";
 
                         new QRCode(qrCodeRef.current, {
@@ -125,7 +121,6 @@
                             colorLight : colorLight,
                             correctLevel : QRCode.CorrectLevel.H
                         });
-                        // Hapus title attribute bawaan library
                         qrCodeRef.current.removeAttribute('title');
                     }
                 }, 50);
@@ -161,7 +156,6 @@
 
                 const { jsPDF } = window.jspdf;
                 
-                // Konfigurasi ukuran
                 let format = 'a4', orientation = 'portrait', pageWidth = 210, pageHeight = 297, qrSize = 100, fontSize = 12;
 
                 if (pdfSize === 'a4') {
@@ -202,7 +196,6 @@
                 setText("");
                 setLabel("");
                 setIsGenerated(false);
-                // Cek ref sebelum akses
                 if(qrCodeRef.current) qrCodeRef.current.innerHTML = "";
             };
 
@@ -210,7 +203,6 @@
                 <div className="w-full max-w-4xl mx-auto animate-fade-in">
                     <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-200 flex flex-col md:flex-row">
                         
-                        {/* Kolom Kiri: Input */}
                         <div className="p-8 md:w-1/2 space-y-6 border-b md:border-b-0 md:border-r border-slate-100">
                              <div>
                                 <h2 className="text-2xl font-bold text-slate-800 mb-1">Buat QR Code</h2>
@@ -258,7 +250,6 @@
                             </div>
                         </div>
 
-                        {/* Kolom Kanan: Preview */}
                         <div className="p-8 md:w-1/2 bg-slate-50 flex flex-col justify-center items-center">
                             {!isGenerated ? (
                                 <div className="text-center text-slate-400 space-y-3">
@@ -467,17 +458,21 @@
                 };
             }, [tickets]);
 
+            // UPDATE: Menambahkan Menu Eksternal ke Navigasi
             const navigationMenus = [
                 { id: 1, label: "Dashboard", icon: "LayoutDashboard" },
                 { id: 2, label: "Ticketing", icon: "Ticket" },
+                // --- MENU LINK EKSTERNAL ---
+                { id: 20, label: "Visitor", icon: "UserPlus", href: "https://proops-support.github.io/tamu/" },
+                { id: 21, label: "Patrol Reports", icon: "ClipboardCheck", href: "https://proops-support.github.io/Laporan/" },
+                { id: 22, label: "E-Patrol", icon: "Siren", href: "https://proops-support.github.io/Patroli/index.html" },
+                { id: 23, label: "ScureGuard", icon: "ShieldAlert", href: "https://proops-support.github.io/ScureGuard/" },
+                { id: 24, label: "Manajemen ATK", icon: "PackageOpen", href: "https://proops-support.github.io/ATK/" },
+                { id: 25, label: "Form Transaksi", icon: "Receipt", href: "https://proops-support.github.io/transaksi/" },
+                // ---------------------------
                 { id: 10, label: "QR Generator", icon: "QrCode" }, 
-                { id: 11, label: "Jadwal", icon: "Calendar" }, // MENU BARU
-                { id: 3, label: "Asset Management", icon: "HardHat", hasDropdown: true },
-                // Menu Maintenance dihapus sesuai permintaan
-                { id: 5, label: "Facility", icon: "Building2" },
-                // Menu Safety/HSE dihapus sesuai permintaan
+                { id: 11, label: "Jadwal", icon: "Calendar" },
                 { id: 7, label: "Reports", icon: "FileBarChart" },
-                { id: 8, label: "Utility", icon: "Zap", hasDropdown: true },
                 { id: 9, label: "Settings", icon: "Settings" },
             ];
 
@@ -552,21 +547,37 @@
                             </div>
                             
                             {/* Desktop Navigation */}
-                            <nav className="hidden xl:flex items-center bg-slate-100/50 rounded-xl p-1 space-x-1">
+                            <nav className="hidden xl:flex items-center bg-slate-100/50 rounded-xl p-1 space-x-1 overflow-x-auto max-w-4xl">
                                 {navigationMenus.map(menu => (
-                                    <button 
-                                        key={menu.id}
-                                        onClick={() => setActiveTab(menu.label)}
-                                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                            activeTab === menu.label 
-                                                ? 'bg-white text-orange-600 shadow-sm border border-slate-100' 
-                                                : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
-                                        }`}
-                                    >
-                                        <Icon name={menu.icon} size={14} strokeWidth={activeTab === menu.label ? 2.5 : 2} />
-                                        <span>{menu.label}</span>
-                                        {menu.hasDropdown && <Icon name="ChevronDown" size={12} className="opacity-50" />}
-                                    </button>
+                                    menu.href ? (
+                                        // RENDER LINK EKSTERNAL
+                                        <a 
+                                            key={menu.id}
+                                            href={menu.href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-orange-600 hover:bg-white/50"
+                                        >
+                                            <Icon name={menu.icon} size={14} strokeWidth={2} />
+                                            <span className="whitespace-nowrap">{menu.label}</span>
+                                            <Icon name="ExternalLink" size={10} className="opacity-50" />
+                                        </a>
+                                    ) : (
+                                        // RENDER MENU INTERNAL
+                                        <button 
+                                            key={menu.id}
+                                            onClick={() => setActiveTab(menu.label)}
+                                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                                activeTab === menu.label 
+                                                    ? 'bg-white text-orange-600 shadow-sm border border-slate-100' 
+                                                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+                                            }`}
+                                        >
+                                            <Icon name={menu.icon} size={14} strokeWidth={activeTab === menu.label ? 2.5 : 2} />
+                                            <span className="whitespace-nowrap">{menu.label}</span>
+                                            {menu.hasDropdown && <Icon name="ChevronDown" size={12} className="opacity-50" />}
+                                        </button>
+                                    )
                                 ))}
                             </nav>
                         </div>
@@ -600,21 +611,37 @@
                             >
                                 <div className="grid grid-cols-2 gap-2">
                                     {navigationMenus.map(menu => (
-                                        <button 
-                                            key={menu.id}
-                                            onClick={() => {
-                                                setActiveTab(menu.label);
-                                                setIsMobileMenuOpen(false);
-                                            }}
-                                            className={`flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border ${
-                                                activeTab === menu.label 
-                                                    ? 'bg-orange-50 text-orange-600 border-orange-100' 
-                                                    : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
-                                            }`}
-                                        >
-                                            <Icon name={menu.icon} size={24} className="mb-2" strokeWidth={activeTab === menu.label ? 2.5 : 2} />
-                                            <span>{menu.label}</span>
-                                        </button>
+                                        menu.href ? (
+                                            <a 
+                                                key={menu.id}
+                                                href={menu.href}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border bg-white text-slate-500 border-slate-100 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-100 group"
+                                            >
+                                                <Icon name={menu.icon} size={24} className="mb-2 group-hover:scale-110 transition-transform" strokeWidth={2} />
+                                                <div className="flex items-center gap-1">
+                                                    <span>{menu.label}</span>
+                                                    <Icon name="ExternalLink" size={12} className="opacity-50" />
+                                                </div>
+                                            </a>
+                                        ) : (
+                                            <button 
+                                                key={menu.id}
+                                                onClick={() => {
+                                                    setActiveTab(menu.label);
+                                                    setIsMobileMenuOpen(false);
+                                                }}
+                                                className={`flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border ${
+                                                    activeTab === menu.label 
+                                                        ? 'bg-orange-50 text-orange-600 border-orange-100' 
+                                                        : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <Icon name={menu.icon} size={24} className="mb-2" strokeWidth={activeTab === menu.label ? 2.5 : 2} />
+                                                <span>{menu.label}</span>
+                                            </button>
+                                        )
                                     ))}
                                 </div>
                             </div>
