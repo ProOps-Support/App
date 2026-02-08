@@ -36,8 +36,8 @@
             animation: fadeIn 0.3s ease-out;
         }
         
-        .animate-slide-down {
-            animation: slideDown 0.3s ease-out forwards;
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
         }
 
         @keyframes fadeIn {
@@ -45,17 +45,18 @@
             to { opacity: 1; transform: scale(1); }
         }
         
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
         }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
-            width: 8px;
+            width: 6px;
+            height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #f1f5f9;
+            background: transparent;
         }
         ::-webkit-scrollbar-thumb {
             background: #cbd5e1;
@@ -66,24 +67,32 @@
         }
     </style>
 </head>
-<body class="bg-[#F0F4F8]">
+<body class="bg-[#F0F4F8] overflow-hidden">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- ICON COMPONENT ---
+        // --- ICON COMPONENT (Robust Version) ---
         const Icon = ({ name, size = 18, className = "", strokeWidth = 2 }) => {
+            const iconRef = useRef(null);
+
             useEffect(() => {
                 if (window.lucide) {
-                    window.lucide.createIcons();
+                    window.lucide.createIcons({
+                        root: iconRef.current ? iconRef.current.parentNode : document.body
+                    });
                 }
             }, [name]);
 
-            return <i data-lucide={name.toLowerCase().replace(/([a-z])([A-Z])/g, '$1-$2')} 
-                      style={{ width: size, height: size }} 
-                      className={`${className}`}
-                      strokeWidth={strokeWidth}></i>;
+            // Gunakan key={name} untuk memastikan React merender ulang elemen jika nama ikon berubah
+            return <i 
+                key={name}
+                ref={iconRef}
+                data-lucide={name.toLowerCase().replace(/([a-z])([A-Z])/g, '$1-$2')} 
+                style={{ width: size, height: size }} 
+                className={`${className}`}
+                strokeWidth={strokeWidth}></i>;
         };
 
         // --- QR GENERATOR COMPONENT ---
@@ -200,7 +209,7 @@
             };
 
             return (
-                <div className="w-full max-w-4xl mx-auto animate-fade-in">
+                <div className="w-full animate-fade-in">
                     <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-200 flex flex-col md:flex-row">
                         
                         <div className="p-8 md:w-1/2 space-y-6 border-b md:border-b-0 md:border-r border-slate-100">
@@ -313,7 +322,7 @@
                     </div>
 
                     {/* Grid Layanan */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                         {categories.map((cat) => (
                             <button 
                                 key={cat.id}
@@ -333,9 +342,9 @@
                     </div>
 
                     {/* Status Overview & Recent Tickets */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                         {/* TABEL TIKET TERKINI */}
-                        <div className="lg:col-span-2 bg-white rounded-[1.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="xl:col-span-2 bg-white rounded-[1.5rem] shadow-sm border border-slate-100 overflow-hidden">
                             <div className="p-6 border-b border-slate-50 flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
                                     <div className="p-1.5 bg-orange-50 rounded-lg">
@@ -441,7 +450,7 @@
             const [formStatus, setFormStatus] = useState('idle');
             const [selectedDept, setSelectedDept] = useState('');
             const [isManualDept, setIsManualDept] = useState(false);
-            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             
             // State Tiket Utama
             const [tickets, setTickets] = useState([
@@ -458,7 +467,7 @@
                 };
             }, [tickets]);
 
-            // UPDATE: Menambahkan Menu Eksternal ke Navigasi
+            // MENU SIDEBAR DENGAN ICON LENGKAP
             const navigationMenus = [
                 { id: 1, label: "Dashboard", icon: "LayoutDashboard" },
                 // --- MENU LINK EKSTERNAL ---
@@ -522,150 +531,177 @@
                 }, 1000);
             };
 
-            return (
-                <div className="min-h-screen flex flex-col relative">
-                    {/* Header */}
-                    <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 h-16 border-b border-slate-200 px-6 flex items-center justify-between">
-                        <div className="flex items-center space-x-2 xl:space-x-8">
-                            {/* Mobile Hamburger Button */}
-                            <button 
-                                className="xl:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                            >
-                                <Icon name={isMobileMenuOpen ? "X" : "Menu"} size={24} />
-                            </button>
-
-                            <div className="flex items-center space-x-2 cursor-pointer" onClick={()=>setActiveTab('Dashboard')}>
-                                <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200">
-                                    <Icon name="Wrench" size={24} />
-                                </div>
-                                <h1 className="text-xl font-bold text-slate-800 tracking-tight hidden md:block">Ops<span className="text-orange-600 font-extrabold">Support</span> Center</h1>
+            // Sidebar Menu Component
+            const SidebarContent = () => (
+                <div className="flex flex-col h-full w-full">
+                    <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-slate-100 bg-white shrink-0 transition-all duration-300">
+                        <div className="flex items-center space-x-2 overflow-hidden whitespace-nowrap">
+                            <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-orange-200 shrink-0">
+                                <Icon name="Wrench" size={18} />
                             </div>
-                            
-                            {/* Desktop Navigation */}
-                            <nav className="hidden xl:flex items-center bg-slate-100/50 rounded-xl p-1 space-x-1 overflow-x-auto max-w-4xl">
-                                {navigationMenus.map(menu => (
-                                    menu.href ? (
-                                        // RENDER LINK EKSTERNAL
-                                        <a 
-                                            key={menu.id}
-                                            href={menu.href}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-orange-600 hover:bg-white/50"
-                                        >
-                                            <Icon name={menu.icon} size={14} strokeWidth={2} />
-                                            <span className="whitespace-nowrap">{menu.label}</span>
-                                            <Icon name="ExternalLink" size={10} className="opacity-50" />
-                                        </a>
-                                    ) : (
-                                        // RENDER MENU INTERNAL
-                                        <button 
-                                            key={menu.id}
-                                            onClick={() => setActiveTab(menu.label)}
-                                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                                activeTab === menu.label 
-                                                    ? 'bg-white text-orange-600 shadow-sm border border-slate-100' 
-                                                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
-                                            }`}
-                                        >
-                                            <Icon name={menu.icon} size={14} strokeWidth={activeTab === menu.label ? 2.5 : 2} />
-                                            <span className="whitespace-nowrap">{menu.label}</span>
-                                            {menu.hasDropdown && <Icon name="ChevronDown" size={12} className="opacity-50" />}
-                                        </button>
-                                    )
-                                ))}
-                            </nav>
+                            <span className="text-lg font-extrabold text-slate-800 tracking-tight md:opacity-0 md:group-hover:opacity-100 md:w-0 md:group-hover:w-auto transition-all duration-300 opacity-100">
+                                Ops<span className="text-orange-600">Support</span>
+                            </span>
                         </div>
+                        {/* Tombol Tutup Sidebar di Mobile */}
+                        <button 
+                            className="md:hidden absolute right-4 p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50"
+                            onClick={() => setIsSidebarOpen(false)}
+                        >
+                            <Icon name="X" size={20} />
+                        </button>
+                    </div>
 
-                        <div className="flex items-center space-x-4">
-                            <div className="relative hidden md:block">
-                                <Icon name="Search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Cari tiket atau aset..." 
-                                    className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-xs w-56 focus:ring-2 focus:ring-orange-100 outline-none transition-all"
-                                />
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <button className="p-2 text-slate-400 hover:text-orange-600 transition-colors">
-                                    <Icon name="Bell" size={20} />
+                    <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1 custom-scrollbar overflow-x-hidden">
+                        <p className="px-3 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 mt-2 md:text-center md:group-hover:text-left transition-all whitespace-nowrap">
+                            <span className="md:hidden md:group-hover:inline">Menu Utama</span>
+                            <span className="hidden md:inline md:group-hover:hidden">•</span>
+                        </p>
+                        {navigationMenus.map(menu => (
+                             menu.href ? (
+                                <a 
+                                    key={menu.id}
+                                    href={menu.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:text-orange-600 hover:bg-orange-50 transition-all group/item"
+                                >
+                                    <div className="shrink-0 flex items-center justify-center w-6">
+                                        <Icon name={menu.icon} size={18} className="text-slate-400 group-hover/item:text-orange-500 transition-colors" />
+                                    </div>
+                                    <span className="flex-1 md:opacity-0 md:group-hover:opacity-100 md:max-w-0 md:group-hover:max-w-xs overflow-hidden whitespace-nowrap transition-all duration-300 opacity-100 max-w-full">
+                                        {menu.label}
+                                    </span>
+                                    <span className="md:opacity-0 md:group-hover:opacity-100 md:max-w-0 md:group-hover:max-w-xs overflow-hidden transition-all duration-300 opacity-100">
+                                        <Icon name="ExternalLink" size={14} className="opacity-30 group-hover/item:opacity-100" />
+                                    </span>
+                                </a>
+                            ) : (
+                                <button 
+                                    key={menu.id}
+                                    onClick={() => {
+                                        setActiveTab(menu.label);
+                                        // Tutup sidebar di mobile setelah klik menu
+                                        if (window.innerWidth < 768) setIsSidebarOpen(false);
+                                    }}
+                                    className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                                        activeTab === menu.label 
+                                            ? 'bg-orange-600 text-white shadow-lg shadow-orange-200' 
+                                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <div className="shrink-0 flex items-center justify-center w-6">
+                                        <Icon name={menu.icon} size={18} className={`${activeTab === menu.label ? 'text-white' : 'text-slate-400'}`} strokeWidth={activeTab === menu.label ? 2.5 : 2} />
+                                    </div>
+                                    <span className={`md:opacity-0 md:group-hover:opacity-100 md:max-w-0 md:group-hover:max-w-xs overflow-hidden whitespace-nowrap transition-all duration-300 opacity-100 max-w-full text-left`}>
+                                        {menu.label}
+                                    </span>
                                 </button>
-                                <div className="w-9 h-9 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden cursor-pointer">
-                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
-                                </div>
+                            )
+                        ))}
+                    </div>
+
+                    <div className="p-4 border-t border-slate-100 shrink-0">
+                        <div className="bg-slate-50 rounded-xl p-3 flex items-center space-x-3 border border-slate-100 overflow-hidden">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 border border-white shadow-sm overflow-hidden shrink-0">
+                                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
                             </div>
+                            <div className="flex-1 min-w-0 md:opacity-0 md:group-hover:opacity-100 md:max-w-0 md:group-hover:max-w-xs overflow-hidden whitespace-nowrap transition-all duration-300 opacity-100 max-w-full">
+                                <p className="text-xs font-bold text-slate-700 truncate">Admin Support</p>
+                                <p className="text-[10px] text-slate-400 truncate">admin@ops.com</p>
+                            </div>
+                            <span className="md:opacity-0 md:group-hover:opacity-100 md:max-w-0 md:group-hover:max-w-xs overflow-hidden transition-all duration-300 opacity-100">
+                                <Icon name="LogOut" size={16} className="text-slate-400 hover:text-red-500 cursor-pointer" />
+                            </span>
                         </div>
-                    </header>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="flex h-screen bg-[#F0F4F8] overflow-hidden">
                     
-                    {/* Mobile Navigation Dropdown */}
-                    {isMobileMenuOpen && (
-                        <div className="fixed inset-0 z-30 bg-slate-900/20 backdrop-blur-sm xl:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-                            <div 
-                                className="absolute top-16 left-0 right-0 bg-white border-b border-slate-200 shadow-xl p-4 animate-slide-down max-h-[80vh] overflow-y-auto"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <div className="grid grid-cols-2 gap-2">
-                                    {navigationMenus.map(menu => (
-                                        menu.href ? (
-                                            <a 
-                                                key={menu.id}
-                                                href={menu.href}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border bg-white text-slate-500 border-slate-100 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-100 group"
-                                            >
-                                                <Icon name={menu.icon} size={24} className="mb-2 group-hover:scale-110 transition-transform" strokeWidth={2} />
-                                                <div className="flex items-center gap-1">
-                                                    <span>{menu.label}</span>
-                                                    <Icon name="ExternalLink" size={12} className="opacity-50" />
-                                                </div>
-                                            </a>
-                                        ) : (
-                                            <button 
-                                                key={menu.id}
-                                                onClick={() => {
-                                                    setActiveTab(menu.label);
-                                                    setIsMobileMenuOpen(false);
-                                                }}
-                                                className={`flex flex-col items-center justify-center p-4 rounded-xl font-bold transition-all text-sm border ${
-                                                    activeTab === menu.label 
-                                                        ? 'bg-orange-50 text-orange-600 border-orange-100' 
-                                                        : 'bg-white text-slate-500 border-slate-100 hover:bg-slate-50'
-                                                }`}
-                                            >
-                                                <Icon name={menu.icon} size={24} className="mb-2" strokeWidth={activeTab === menu.label ? 2.5 : 2} />
-                                                <span>{menu.label}</span>
-                                            </button>
-                                        )
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
+                    {/* BACKDROP UNTUK MOBILE */}
+                    {isSidebarOpen && (
+                        <div 
+                            className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm md:hidden animate-fade-in"
+                            onClick={() => setIsSidebarOpen(false)}
+                        ></div>
                     )}
 
-                    <main className="flex-1 w-full max-w-7xl mx-auto p-6">
-                        {/* CONDITIONAL RENDERING UTAMA */}
-                        {activeTab === 'QR Generator' ? (
-                            <QrGeneratorComponent />
-                        ) : activeTab === 'Dashboard' ? (
-                            <DashboardComponent 
-                                tickets={tickets}
-                                stats={stats}
-                                categories={categories}
-                                handleOpenModal={handleOpenModal}
-                            />
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
-                                <Icon name="Hammer" size={64} className="mb-4 text-slate-200" />
-                                <h3 className="text-xl font-bold">Halaman {activeTab}</h3>
-                                <p className="text-sm">Sedang dalam pengembangan.</p>
-                                <button onClick={() => setActiveTab('Dashboard')} className="mt-4 text-orange-600 font-bold text-sm hover:underline">Kembali ke Dashboard</button>
-                            </div>
-                        )}
-                    </main>
+                    {/* SIDEBAR RESPONSIVE */}
+                    <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out
+                        ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'} 
+                        md:translate-x-0 md:static md:flex flex-col shrink-0 h-full
+                        md:w-20 md:hover:w-64 group`}
+                    >
+                        <SidebarContent />
+                    </aside>
 
-                    {/* MODAL FORM LAPORAN */}
+                    {/* MAIN CONTENT AREA */}
+                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+                        {/* HEADER DI ATAS MAIN CONTENT (Mobile & Desktop) */}
+                        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-30 h-16 border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                {/* Tombol Hamburger Mobile */}
+                                <button 
+                                    className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                    onClick={() => setIsSidebarOpen(true)}
+                                >
+                                    <Icon name="Menu" size={24} />
+                                </button>
+                                
+                                <h1 className="text-lg font-bold text-slate-800 md:hidden">OpsSupport</h1>
+
+                                {/* Search Bar (Desktop Only - Optional) */}
+                                <div className="hidden md:block relative w-64">
+                                    <Icon name="Search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Cari tiket, aset, dll..." 
+                                        className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl text-xs focus:ring-2 focus:ring-orange-100 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button className="p-2 text-slate-400 hover:text-orange-600 transition-colors relative">
+                                    <Icon name="Bell" size={20} />
+                                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                                </button>
+                            </div>
+                        </header>
+
+                        {/* SCROLLABLE MAIN CONTENT */}
+                        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth">
+                            <div className="max-w-7xl mx-auto">
+                                {/* CONDITIONAL RENDERING UTAMA */}
+                                {activeTab === 'QR Generator' ? (
+                                    <QrGeneratorComponent />
+                                ) : activeTab === 'Dashboard' ? (
+                                    <DashboardComponent 
+                                        tickets={tickets}
+                                        stats={stats}
+                                        categories={categories}
+                                        handleOpenModal={handleOpenModal}
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+                                        <Icon name="Hammer" size={64} className="mb-4 text-slate-200" />
+                                        <h3 className="text-xl font-bold">Halaman {activeTab}</h3>
+                                        <p className="text-sm">Sedang dalam pengembangan.</p>
+                                        <button onClick={() => setActiveTab('Dashboard')} className="mt-4 text-orange-600 font-bold text-sm hover:underline">Kembali ke Dashboard</button>
+                                    </div>
+                                )}
+                            </div>
+
+                             <footer className="py-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-auto">
+                                &copy; 2026 Operations Dashboard • Real-time Monitoring System
+                            </footer>
+                        </main>
+                    </div>
+
+                    {/* MODAL FORM LAPORAN (Tetap sama) */}
                     {showModal && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm">
                             <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden animate-fade-in max-h-[90vh] flex flex-col">
@@ -684,7 +720,7 @@
                                     </button>
                                 </div>
                                 
-                                <div className="overflow-y-auto flex-1">
+                                <div className="overflow-y-auto flex-1 custom-scrollbar">
                                     {formStatus === 'success' ? (
                                         <div className="p-12 text-center flex flex-col items-center justify-center">
                                             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
@@ -785,10 +821,6 @@
                             </div>
                         </div>
                     )}
-
-                    <footer className="p-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border-t border-slate-100 mt-auto">
-                        &copy; 2026 Operations Dashboard • Real-time Monitoring System
-                    </footer>
                 </div>
             );
         };
